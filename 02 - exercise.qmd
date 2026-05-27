@@ -1,0 +1,96 @@
+---
+title: "2 - Exercise: Multiple stocks from an index"
+format:
+  html:
+    embed-resources: true
+editor: visual
+---
+
+## Exercise
+
+This exercise is about repeating the multi-stock workflow on a different slice of the market. You'll pull an index, filter it to a country or sector of your choice, and visualize returns for that subset. Answer the short prompts in the text under each heading as you go.
+
+### 1. Install (if necessary) and load libraries
+
+```{r}
+#| label: load-libraries
+#| message: false
+#| warning: false
+
+# your code here
+
+```
+
+### 2. Tibble of index companies
+
+Insert a code chunk that pulls down the components for the Dow Global Index and places the information in a tibble called `tickers`. Hint: `"DOWGLOBAL"`. How many components (listings) are there? Write your answer after the code chunk.
+
+```{r}
+#| label: get-tickers
+
+# your code here
+
+```
+
+ANSWER:
+
+### 3. Clean your data
+
+Overwrite your tibble to include ONLY companies headquartered in Great Britain. You can `filter` on `local_currency == "GBP"`. Use `==` to include those companies as opposed to what we did in class, which was drop unwanted listings with `!=`.
+
+```{r}
+#| label: filter-gbp
+
+# your code here
+
+```
+
+One more cleaning step. We don't want the currency listing itself (look for "POUND STERLING"). Drop it.
+
+```{r}
+#| label: drop-currency
+
+# your code here
+
+```
+
+How many British companies are listed on the Dow Global Index?
+
+ANSWER:
+
+### 4. Pull down data
+
+Get pricing and other data for your British components. Place them in a new tibble called `brit_prices`. Pull one year of data, from 2024-01-01 through 2024-12-31.
+
+```{r}
+#| label: get-brit-prices
+
+# your code here
+
+```
+
+It may not recognize a couple of the symbols and will drop those observations. That's okay.
+
+### 5. Create a stock chart for the pricing data
+
+You only have a handful of companies. Visualize their 2024 prices in one chart. Title the plot "2024 prices, British Dow Global Companies." Leave the legend in this time so we can tell which line is which.
+
+```{r}
+#| label: plot-brit-prices
+
+# your code here
+
+```
+
+### 6. A quick comparison
+
+Build a tibble `brit_stats` of summary statistics (mean, sd, skewness, kurtosis) for the daily returns of your British companies. Which one had the best risk-adjusted performance - roughly, the highest ratio of mean to standard deviation?
+
+```{r}
+#| label: brit-stats
+
+# your code here
+
+```
+
+ANSWER:

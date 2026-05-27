@@ -1,0 +1,197 @@
+---
+title: "2: Generalizing code for multiple stocks"
+format:
+  html:
+    embed-resources: true
+editor: visual
+---
+
+### Introduction
+
+We're going to take what we learned in the first lesson and generalize our code to run visualizations and summary statistics for multiple stocks at once. We're again going to use `tidyverse` and `tidyquant`. A great resource for tidy finance, and from which this particular lesson is derived, is [***Tidy Finance***](https://www.tidy-finance.org/) by Scheuch, Voigt, and Weiss. You have to love the R community; so many resources are top quality and free!
+
+### Load libraries
+
+Every time you run an R script you'll need to load the libraries you're going to use throughout the coding session.
+
+```{r}
+#| label: load-libraries
+#| message: false
+#| warning: false
+library(tidyverse)
+library(tidyquant)
+```
+
+### Use `tidyquant` to pull data from Yahoo! Finance
+
+We're going to first take a look at the components of the DOW index of 30 stocks. We will create a tibble `tickers` with the component tickers and other information, e.g. the weighting of each stock in the index. First use `<-` to assign the components to the `tickers` tibble, then take a look by typing the name of the tibble. Note that for some reason, there is sometimes a "US DOLLAR" component, which we will remove by `filter`. The `!=` is "not equal", so the second line in the code is telling the function to pull all components that are not named "US DOLLAR."
+
+```{r}
+#| label: get-tickers
+# grab components with tq_index
+tickers <- tq_index("DOW") |>
+    filter(company != "US DOLLAR")
+
+# take a look
+tickers
+```
+
+You can also click `tickers` once the object shows up in your **Variables panel** to open the full data set in a new window.
+
+Now that we have a tibble of tickers, we can feed the tickers into a call for stock prices. Previously, we gave the call a single ticker, ISRG. Now we're going to feed the tickers into the call to grab all the prices for all the components of the DOW with the same `tq_get` we used last time. We'll pull 20 years of data as before.
+
+```{r}
+#| label: get-dow-prices
+# pull pricing data for 20 years
+dow_prices <- tq_get(tickers,
+                     get  = "stock.prices",
+                     from = "2005-01-01",
+                     to   = "2025-12-31"
+)
+```
+
+Take a look by clicking `dow_prices` in the **Variables panel**. There are well over 100,000 daily observations across the 30 tickers, and it only took a few seconds to build the tibble!
+
+### An "all components" visualization
+
+We can jointly chart all the components at once, just for fun. We're going to use `ggplot` again, this time making a separate line for each company in the index. Note that we are specifying that `color` is assigned by `symbol`, where `symbol` is the name of the variable we would otherwise call the "ticker." It's important that you know what variables are in your data set so you can operate on them efficiently. If we told it to group by "ticker" we would get an error.
+
+```{r}
+#| label: dow-plot-with-legend
+dow_prices |>
+    ggplot(aes(
+        x     = date,
+        y     = adjusted,
+        color = symbol
+    )) +
+    geom_line() +
+    labs(
+        x     = NULL,
+        y     = NULL,
+        color = NULL,
+        title = "Stock prices of DOW components, 2005-2025"
+    ) +
+    theme_minimal()
+```
+
+That's cool, but messy. `ggplot` automatically created a legend with the color for each component. We don't really need that (again, this is just for fun), so we can slightly alter the code to remove the legend with `theme(legend.position = "none")`.
+
+```{r}
+#| label: dow-plot-no-legend
+dow_prices |>
+    ggplot(aes(
+        x     = date,
+        y     = adjusted,
+        color = symbol
+    )) +
+    geom_line() +
+    labs(
+        x     = NULL,
+        y     = NULL,
+        color = NULL,
+        title = "Stock prices of DOW components, 2005-2025"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+```
+
+### Calculate returns for each company at once
+
+We can calculate returns for all components using the magic of the `tidyverse`, specifically by using the `.by` argument inside `mutate`. In fact, you can (and will, all the time, in data science) do calculations, assign variables, and other mechanics on groups of observations. Common groups might be companies, or years, or periods, or people, or classes, or...you get the idea.
+
+In the older tidyverse you'll often see `group_by(symbol) |> mutate(...)`. That still works - I used it myself for years - but starting with dplyr 1.1 we have a cleaner `.by =` argument that does the grouping inline and automatically drops it when the operation is done. No more forgetting to `ungroup()` at the end of your pipeline. We'll use that modern style from here on.
+
+```{r}
+#| label: dow-returns
+dow_returns <- dow_prices |>
+    arrange(symbol, date) |>
+    mutate(ret = (adjusted / lag(adjusted) - 1) * 100, .by = symbol) |>
+    select(symbol, date, ret) |>
+    drop_na(ret)
+```
+
+### Summary statistics
+
+Previously, we had a tibble of summary stats for ISRG. And while that's a good thing, one company in isolation is not terribly informative. We want to compare average returns, risk, and other measures across many stocks. That's how we start to filter for stocks that may fit our investment objectives or research agenda. Let's create a tibble that collects summary statistics for each stock in the DOW in one place.
+
+```{r}
+#| label: dow-stats
+dow_stats <- dow_returns |>
+    summarize(
+        mean = mean(ret),
+        med  = median(ret),
+        sd   = sd(ret),
+        max  = max(ret),
+        min  = min(ret),
+        skew = skewness(ret),
+        kurt = kurtosis(ret),
+        .by  = symbol
+    ) |>
+    arrange(desc(mean))
+
+dow_stats
+```
+
+Open `dow_stats` from the **Variables panel**, or just let it print above. What do you see?
+
+You should notice the difference in mean (average daily) returns and the risk (standard deviation) across companies. Financial crisis survivors like [JP Morgan](https://www.jpmorgan.com/global) tend to show elevated standard deviations because our period includes 2008-2009 and COVID. You can also easily see that the returns distributions are not normal. Even "boring" industrial names like [Caterpillar](https://www.caterpillar.com/) routinely have kurtosis well above 3 (remember, 3 is normal), and often negative skewness, meaning more big negative returns than big positive returns.
+
+### Another aggregation example
+
+You will often group your calculations across different measures to achieve different results and get some insight into different questions. A common intuition is that trading volume is "sticky," in other words, that when there was a lot of trading yesterday there will probably be a lot of trading again today. When markets are quiet today, we might expect the market to be quiet tomorrow, too. We can use data science to empirically look at that very question.
+
+Let's create a daily aggregate trading volume - in USD - of shares traded for the DOW. We're going to summarize, each day, the number of shares of Microsoft, Apple, McDonald's, JP Morgan, Walmart, etc. that were traded multiplied by the closing price of each, put together. Finally, we will scale the output by `1e9` so that what we get is aggregate daily trading volume in USD *billions*.
+
+Create a tibble of `volume`.
+
+```{r}
+#| label: volume
+volume <- dow_prices |>
+    summarize(volume = sum(volume * close / 1e9), .by = date) |>
+    arrange(date)
+```
+
+To pop open the full tibble in a spreadsheet-style window in your Codespace, use `View(volume)` (capital V) in the console. I'll skip that in this rendered document.
+
+Let's plot the time series of volume in USD billions. We'll also plot a simple moving average (SMA) of trading volume of 90 days over the time period so we can better see the trend.
+
+```{r}
+#| label: volume-over-time
+#| warning: false
+volume |>
+    ggplot(aes(x = date, y = volume)) +
+    geom_line(color = "blue") +
+    geom_ma(ma_fun = SMA, n = 90, color = "red") +
+    labs(
+        x     = NULL,
+        y     = NULL,
+        title = "Aggregate daily trading volume of DOW components, USD billions"
+    ) +
+    theme_minimal()
+```
+
+That's a very busy graphic. There seems to be some relationship, a positive linear one, but we can probably do better in terms of visualization as to the "sticky" intuition. If we plot day `t` against the day before, `t-1`, we can get a clearer view of what's going on. If high volume days are largely followed by high volume days (and low with low), we should see an overall pattern that is strongly positive. We're going to plot yesterday's volume on the x axis and today's volume on the y axis such that each day is a "point." This kind of visualization is called a scatterplot. Remember, the `geom` is the kind of visualization (e.g. line, point) we want. We'll also add an AB line as a reference, with a 0 intercept and a slope of 1. If the scatterplot looks anything like the AB line there is a strong positive linear relationship.
+
+```{r}
+#| label: volume-persistence
+#| warning: false
+volume |>
+    ggplot(aes(x = lag(volume), y = volume)) +
+    geom_point(alpha = 0.3) +
+    geom_abline(aes(intercept = 0, slope = 1),
+                linetype = "dashed",
+                color    = "red"
+    ) +
+    labs(
+        x     = "Previous day aggregate trading volume",
+        y     = "Aggregate trading volume",
+        title = "Persistence in trading volume of DOW constituents"
+    ) +
+    theme_minimal()
+```
+
+It looks like we have empirical evidence, at least in terms of a visualization, that there is a strong, positive, linear relationship between volume today and volume yesterday. In other words, in data science we would say that yesterday's volume is a strong predictor of what today's volume will be.
+
+## Exercise
+
+Open the companion exercise file. You'll pull down a global index, filter it to a country of your choice, grab a year of pricing data, and chart the whole set together in a single plot. It's more or less what we did here, but on a different slice of the world - and it gives you good practice with `filter`, `tq_index`, and group-by visualization.
